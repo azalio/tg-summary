@@ -36,7 +36,11 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize Telegram client", zap.Error(err))
 	}
-	msgStorage := storage.NewSqliteStorage()           // TODO: Pass logger/config if needed
+	msgStorage, err := storage.NewGormStorage(cfg.SqlitePath)
+	if err != nil {
+		logger.Fatal("Failed to initialize storage", zap.Error(err))
+	}
+	_ = msgStorage                                     // avoid unused variable warning
 	llmSummarizer := summarizer.NewOpenAISummarizer()  // TODO: Pass logger/config if needed
 	digestSender := delivery.NewTelegramDigestSender() // TODO: Pass logger/config if needed
 	taskScheduler := scheduler.NewCronScheduler()      // TODO: Pass logger/config if needed
@@ -70,16 +74,8 @@ func main() {
 		logger.Fatal("Telegram client run failed", zap.Error(err))
 	}
 
-	// Storage Check (Example: Save a dummy message)
-	dummyMsg := telegram.Message{ID: 1, ChatID: 123, Text: "test"}
-	err = msgStorage.SaveMessage(dummyMsg) // Assign to existing err
-	if err != nil {
-		logger.Fatal("Failed to save message (stub)", zap.Error(err))
-	}
-	logger.Info("Message saved to storage (stub).")
-
-	// Summarizer Check (Example: Summarize dummy message)
-	summary, err := llmSummarizer.Summarize([]telegram.Message{dummyMsg}) // Re-declare summary, assign to existing err
+	// Summarizer Check (Example: Summarize пустой список)
+	summary, err := llmSummarizer.Summarize([]telegram.Message{}) // Re-declare summary, assign to existing err
 	if err != nil {
 		logger.Fatal("Failed to summarize (stub)", zap.Error(err))
 	}

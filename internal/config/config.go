@@ -15,6 +15,7 @@ type Config struct {
 	TelegramAppHash    string
 	TelegramPhone      string
 	TelegramSessionDir string
+	SqlitePath         string // путь до файла SQLite
 	// Add other config fields as needed
 }
 
@@ -29,6 +30,7 @@ func Load(logger applog.Logger) (*Config, error) {
 	appHash := os.Getenv("TELEGRAM_APP_HASH")
 	phone := os.Getenv("TELEGRAM_PHONE")
 	sessionDir := os.Getenv("TELEGRAM_SESSION_DIR")
+	sqlitePath := os.Getenv("SQLITE_PATH")
 
 	missing := false
 	if appIDStr == "" {
@@ -47,6 +49,10 @@ func Load(logger applog.Logger) (*Config, error) {
 		logger.Error("Missing TELEGRAM_SESSION_DIR in environment")
 		missing = true
 	}
+	if sqlitePath == "" {
+		logger.Error("Missing SQLITE_PATH in environment")
+		missing = true
+	}
 	if missing {
 		return nil, ErrMissingConfig
 	}
@@ -62,6 +68,7 @@ func Load(logger applog.Logger) (*Config, error) {
 		TelegramAppHash:    appHash,
 		TelegramPhone:      phone,
 		TelegramSessionDir: sessionDir,
+		SqlitePath:         sqlitePath,
 	}, nil
 }
 

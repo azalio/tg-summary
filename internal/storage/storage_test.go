@@ -1,67 +1,64 @@
 package storage
 
 import (
-	"fmt"
+	"context"
+	"os"
 	"testing"
+	"time"
 
-	// Adjust the import path according to your module name
-	"github.com/azalio/tg-summary/internal/telegram" 
+	"github.com/stretchr/testify/require"
 )
 
-// MockMessageStorage is a mock implementation of MessageStorage for testing
-type MockMessageStorage struct {
-	// Add fields to control mock behavior if needed
-	SavedMessages []telegram.Message
-	GetError      error
-	SaveError     error
+const testDBPath = "test_storage.db"
+
+func setupTestStorage(t *testing.T) *GormStorage {
+	_ = os.Remove(testDBPath)
+	st, err := NewGormStorage(testDBPath)
+	require.NoError(t, err)
+	err = st.Init(context.Background())
+	require.NoError(t, err)
+	return st
 }
 
-// NewMockMessageStorage creates a new instance of MockMessageStorage
-func NewMockMessageStorage() *MockMessageStorage {
-	return &MockMessageStorage{
-		SavedMessages: make([]telegram.Message, 0),
-	}
+func teardownTestStorage() {
+	_ = os.Remove(testDBPath)
 }
 
-// SaveMessage implements the MessageStorage interface for the mock
-func (m *MockMessageStorage) SaveMessage(msg telegram.Message) error {
-	fmt.Printf("MockMessageStorage: SaveMessage called for message ID %d\n", msg.ID)
-	if m.SaveError != nil {
-		return m.SaveError
-	}
-	m.SavedMessages = append(m.SavedMessages, msg)
-	return nil
-}
+func TestGormStorage_CRUD(t *testing.T) {
+	st := setupTestStorage(t)
+	defer teardownTestStorage()
 
-// GetMessages implements the MessageStorage interface for the mock
-func (m *MockMessageStorage) GetMessages(chatID int64, from, to int64) ([]telegram.Message, error) {
-	fmt.Printf("MockMessageStorage: GetMessages called for chat %d\n", chatID)
-	if m.GetError != nil {
-		return nil, m.GetError
-	}
-	// Basic filtering for mock, can be enhanced
-	var result []telegram.Message
-	for _, msg := range m.SavedMessages {
-		if msg.ChatID == chatID && msg.Timestamp >= from && msg.Timestamp <= to {
-			result = append(result, msg)
-		}
-	}
-	return result, nil
-}
+	ctx := context.Background()
 
-// Example test using the mock (keep testing import)
-func TestStorageMock(t *testing.T) {
-	mockStorage := NewMockMessageStorage()
-	// Example usage:
-	err := mockStorage.SaveMessage(telegram.Message{ID: 1, ChatID: 123, Timestamp: 100})
-	if err != nil {
-		t.Errorf("SaveMessage failed: %v", err)
+	chat := &Chat{ID: 123, Title: "Test Group", Type: "group"}
+	user := &User{ID: 456, Username: "testuser", DisplayName: "Test User"}
+	msg := &Message{
+		ChatID:    chat.ID,
+		MessageID: 1,
+		AuthorID:  user.ID,
+		Text:      "Hello, world!",
+		Timestamp: time.Now().Unix(),
 	}
-	msgs, err := mockStorage.GetMessages(123, 50, 150)
-	if err != nil {
-		t.Errorf("GetMessages failed: %v", err)
-	}
-	if len(msgs) != 1 {
-		t.Errorf("Expected 1 message, got %d", len(msgs))
-	}
+
+	// Save chat and user
+	require.NoError(t, st.SaveChat(ctx, chat))
+	require.NoError(t, st.SaveUser(ctx, user))
+
+	// Save message
+	require.NoError(t, st.SaveMessage(ctx, msg))
+
+	// Save duplicate message (should not error, DoNothing)
+	require.NoError(t, st.SaveMessage(ctx, msg))
+
+	// Get last message timestamp
+	ts, err := st.GetLastMessageTimestamp(ctx, chat.ID)
+	require.NoError(t, err)
+	require.Equal(t, msg.Timestamp, ts)
+
+	// Get messages after timestamp-1 (should return 1)
+	msgs, err := st.GetMessagesAfter(ctx, chat.ID, msg.Timestamp-1)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, msg.Text, msgs[0].Text)
+	require.Equal(t, msg.AuthorID, msgs[0].AuthorID)
 }
